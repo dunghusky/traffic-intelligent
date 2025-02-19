@@ -1,2 +1,4 @@
 # --------------------Data Path------------------------#
-DATA_PATH = "./traffic-intelligent/model/datasets"
+DATA_PATH = (
+    "./traffic-intelligent/model/datasets/Vehicle-Registration-Plates-1/data.yaml"
+)
