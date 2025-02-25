@@ -2,10 +2,10 @@ from copy import deepcopy
 import cv2
 import torch
 
-from ultralytics import YOLO
-import supervision as sv
 
-vehicles = [2, 3, 5, 7, 9]
+from ultralytics import YOLO
+from ultralytics.trackers import BOTSORT, BYTETracker
+import supervision as sv
 
 def detect_objects(frame, model, conf=0.1, iou=0.5):
     """
@@ -39,9 +39,7 @@ def draw_boxes(frame, detections, box_annotator, lables_annatator):
     labels = [
         f"#{tracker_id} {class_name} {confidence:.2f}"  # {confidence:.2f}
         for class_name, tracker_id, confidence in zip(  # , confidence
-            detections["class_name"],
-            detections.tracker_id,
-            detections.confidence,
+            detections["class_name"], detections.tracker_id, detections.confidence,
         )
     ]
 
@@ -89,7 +87,8 @@ def run_detection():
 
     box_annatator = sv.BoxAnnotator(thickness=2)
     lables_annatator = sv.LabelAnnotator(text_thickness=4, text_scale=1)
-    byte_tracker = sv.ByteTrack()
+    byte_tracker = BYTETracker()
+    # bot_sort = sv.B
 
     # 2. Mở webcam và thiết lập các thông số
     cap = cv2.VideoCapture("./file_path/20221003-102700.mp4")
@@ -100,25 +99,17 @@ def run_detection():
         # if not ret:
         #     print("Không nhận được khung hình (frame). Kết nối có thể đã bị ngắt.")
         #     break
-
-        detections_vehicles = coco_model.predict(frame, classes=vehicles)[0]
-
-        detections_vehicles_test = sv.Detections.from_ultralytics(detections_vehicles)
-        print("Detection: ", detections_vehicles)
-
+        detections_vehicles = detect_objects(frame, coco_model, conf=0.3)
         detetions_ = []
 
         # Kiểm tra detections trước khi tiếp tục
-        if (
-            detections_vehicles_test is not None
-            and len(detections_vehicles_test["class_name"]) > 0
-        ):
+        if detections_vehicles is not None and len(detections_vehicles["class_name"]) > 0:
             # print("\nKiểu dữ liệu: ", detections["class_name"])
             # print("\nLen: ", len(detections["class_name"]))
-            detections = byte_tracker.update_with_detections(
-                detections=detections_vehicles_test
+            detections = byte_tracker.update(
+                detections=detections_vehicles
             )
-            # print("Detection: ", detections)
+            
 
             # Vẽ kết quả lên khung hình
             frame = draw_boxes(frame, detections, box_annatator, lables_annatator)
@@ -129,10 +120,5 @@ def run_detection():
         # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
         if cv2.waitKey(30) == 27:
             break
-
     cap.release()
     cv2.destroyAllWindows()
-
-# Chạy chương trình
-if __name__ == "__main__":
-    run_detection()

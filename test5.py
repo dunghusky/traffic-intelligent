@@ -4,8 +4,10 @@ import torch
 
 from ultralytics import YOLO
 import supervision as sv
+from ultralytics.utils.plotting import Annotator
 
 vehicles = [2, 3, 5, 7, 9]
+
 
 def detect_objects(frame, model, conf=0.1, iou=0.5):
     """
@@ -87,12 +89,17 @@ def run_detection():
     coco_model = YOLO("yolo11n.pt")  # use to detect car and motorbike
     detect_license_plate = YOLO("./model/train/checkpoints/train/weights/best.pt")
 
+    names = coco_model.model.names
+    vehicles = [2, 3, 5, 7, 9]
+
     box_annatator = sv.BoxAnnotator(thickness=2)
     lables_annatator = sv.LabelAnnotator(text_thickness=4, text_scale=1)
     byte_tracker = sv.ByteTrack()
+    label_annotator = sv.LabelAnnotator(text_thickness=3, text_scale=1)
+    box_annotator = sv.BoxAnnotator(thickness=2)
 
     # 2. Mở webcam và thiết lập các thông số
-    cap = cv2.VideoCapture("./file_path/20221003-102700.mp4")
+    cap = cv2.VideoCapture("./file_path/16h15.5.9.22.mp4")
 
     # 3. Vòng lặp chính để đọc khung hình từ webcam
     while True:
@@ -100,38 +107,40 @@ def run_detection():
         # if not ret:
         #     print("Không nhận được khung hình (frame). Kết nối có thể đã bị ngắt.")
         #     break
+        if ret:
+            results = coco_model.track(frame, persist=True, classes=vehicles)[0]
+            detections_vehicles = sv.Detections.from_ultralytics(results)
+            print("Detection: ", detections_vehicles)
 
-        detections_vehicles = coco_model.predict(frame, classes=vehicles)[0]
+            detection_results = []
+            for xyxy, confidence, class_id, track_id in zip(
+                detections_vehicles.xyxy,
+                detections_vehicles.confidence,
+                detections_vehicles.class_id,
+                detections_vehicles.tracker_id,
+            ):
+                x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
+                detection_results.append(
+                    [x1, y1, x2, y2, round(float(confidence), 3), track_id]
+                )
 
-        detections_vehicles_test = sv.Detections.from_ultralytics(detections_vehicles)
-        print("Detection: ", detections_vehicles)
+            # # Detect license plates
+            # license_plates = detect_objects(frame, detect_license_plate)
+            # for license_plate in license_plates:
+            #     x1, y1, x2, y2 = license_plate.xyxy
 
-        detetions_ = []
+            annotated_frame = results.plot()
 
-        # Kiểm tra detections trước khi tiếp tục
-        if (
-            detections_vehicles_test is not None
-            and len(detections_vehicles_test["class_name"]) > 0
-        ):
-            # print("\nKiểu dữ liệu: ", detections["class_name"])
-            # print("\nLen: ", len(detections["class_name"]))
-            detections = byte_tracker.update_with_detections(
-                detections=detections_vehicles_test
-            )
-            # print("Detection: ", detections)
+            # 6. Hiển thị khung hình
+            cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
 
-            # Vẽ kết quả lên khung hình
-            frame = draw_boxes(frame, detections, box_annatator, lables_annatator)
-
-        # 6. Hiển thị khung hình
-        cv2.imshow("YOLOv8 - RTMP Stream", frame)
-
-        # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
-        if cv2.waitKey(30) == 27:
-            break
+            # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
+            if cv2.waitKey(30) == 27:
+                break
 
     cap.release()
     cv2.destroyAllWindows()
+
 
 # Chạy chương trình
 if __name__ == "__main__":
