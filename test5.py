@@ -1,10 +1,18 @@
 from copy import deepcopy
+import os
 import cv2
 import torch
 
 from ultralytics import YOLO
 import supervision as sv
 from ultralytics.utils.plotting import Annotator
+from config import _util
+
+from paddleocr import PaddleOCR
+
+# Initialize the OCR reader
+# reader = easyocr.Reader(["en"], gpu=False)
+ocr = PaddleOCR(lang="en", rec_algorithm="CRNN")
 
 vehicles = [2, 3, 5, 7, 9]
 
@@ -92,50 +100,111 @@ def run_detection():
     names = coco_model.model.names
     vehicles = [2, 3, 5, 7, 9]
 
-    box_annatator = sv.BoxAnnotator(thickness=2)
-    lables_annatator = sv.LabelAnnotator(text_thickness=4, text_scale=1)
+    results = {}
+    box_annatator = sv.BoxAnnotator(thickness=1)
     byte_tracker = sv.ByteTrack()
-    label_annotator = sv.LabelAnnotator(text_thickness=3, text_scale=1)
-    box_annotator = sv.BoxAnnotator(thickness=2)
+    label_annotator = sv.LabelAnnotator(text_thickness=2, text_scale=1)
+
+    frame_nmr = -1
 
     # 2. Mở webcam và thiết lập các thông số
-    cap = cv2.VideoCapture("./file_path/16h15.5.9.22.mp4")
+    cap = cv2.VideoCapture("./file_path/20221003-102700.mp4")
+
+    output_folder = "./file_path/cropped_license_plates"
+    os.makedirs(output_folder, exist_ok=True)
 
     # 3. Vòng lặp chính để đọc khung hình từ webcam
     while True:
         ret, frame = cap.read()
-        # if not ret:
-        #     print("Không nhận được khung hình (frame). Kết nối có thể đã bị ngắt.")
-        #     break
-        if ret:
-            results = coco_model.track(frame, persist=True, classes=vehicles)[0]
-            detections_vehicles = sv.Detections.from_ultralytics(results)
-            print("Detection: ", detections_vehicles)
+
+        frame_nmr += 1
+        if not ret:
+            print("Không nhận được khung hình (frame). Kết nối có thể đã bị ngắt.")
+            return frame
+        else:
+            results[frame_nmr] = {}
+            results_coco = coco_model.track(frame, persist=True, classes=vehicles)[0]
+            detections_vehicles = sv.Detections.from_ultralytics(results_coco)
+            # print("Detection: ", detections_vehicles)
 
             detection_results = []
-            for xyxy, confidence, class_id, track_id in zip(
+            labels = []
+            for xyxy, confidence, class_id, track_id, class_name in zip(
                 detections_vehicles.xyxy,
                 detections_vehicles.confidence,
                 detections_vehicles.class_id,
                 detections_vehicles.tracker_id,
+                detections_vehicles["class_name"]
             ):
                 x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
                 detection_results.append(
-                    [x1, y1, x2, y2, round(float(confidence), 3), track_id]
+                    [x1, y1, x2, y2, track_id]
                 )
 
-            # # Detect license plates
-            # license_plates = detect_objects(frame, detect_license_plate)
-            # for license_plate in license_plates:
-            #     x1, y1, x2, y2 = license_plate.xyxy
+                label = f"#{track_id} {class_name} {confidence:.2f}"
+                labels.append(label)
 
-            annotated_frame = results.plot()
+            annotated_frame = box_annatator.annotate(
+                detections=detections_vehicles, scene=frame
+            )
+
+            annotated_frame = label_annotator.annotate(
+                labels=labels, scene=frame, detections=detections_vehicles
+            )
+
+            # Detect license plates
+            license_plates = detect_objects(frame, detect_license_plate)
+            # print("Detection: ", license_plates)
+            for license_plate_index, license_plate in enumerate(license_plates):
+                xyxy_car, _, conf_license, class_id_license, _, _ = license_plate
+                x1_license, y1_license, x2_license, y2_license = xyxy_car[0], xyxy_car[1], xyxy_car[2], xyxy_car[3]
+
+                # assign license plate to car
+                xcar1, ycar1, xcar2, ycar2, car_id = _util.get_car(
+                    license_plate, detection_results
+                )
+
+                if car_id != -1:
+                    # Crop license plate
+                    license_plate_crop = frame[
+                        int(y1_license) : int(y2_license),
+                        int(x1_license) : int(x2_license),
+                        :
+                    ]
+
+                    # # Lưu ảnh biển số xe đã cắt vào folder
+                    # file_name = f"frame_{frame_nmr}_plate_{license_plate_index}.png"
+                    # save_path = os.path.join(output_folder, file_name)
+                    # cv2.imwrite(save_path, license_plate_crop)
+                    # print(f"Saved cropped license plate: {save_path}")
+
+                    # # Process license plate
+                    license_plate_crop_gray = cv2.cvtColor(
+                        license_plate_crop, cv2.COLOR_BGR2GRAY
+                    )
+
+                    # Read license plate number
+                    license_plate_text, license_plate_text_score = (
+                        _util.read_license_plate(license_plate_crop_gray)
+                    )
+
+                    if license_plate_text is not None:
+                        results[frame_nmr][car_id] = {
+                            "car": {"bbox": [xcar1, ycar1, xcar2, ycar2]},
+                            "license_plate": {
+                                "bbox": [x1_license, y1_license, x2_license, y2_license],
+                                "text": license_plate_text,
+                                "bbox_score": conf_license,
+                                "text_score": license_plate_text_score,
+                            },
+                        }
 
             # 6. Hiển thị khung hình
             cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
+            _util.write_csv(results, "./y_test.csv")
 
             # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
-            if cv2.waitKey(30) == 27:
+            if cv2.waitKey(1) == ord("q"):
                 break
 
     cap.release()
