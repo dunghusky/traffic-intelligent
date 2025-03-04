@@ -16,6 +16,8 @@ ocr = PaddleOCR(lang="en", rec_algorithm="CRNN")
 
 vehicles = [2, 3, 5, 7, 9]
 
+vehicles_car = [2, 5, 7]
+
 
 def detect_objects(frame, model, conf=0.1, iou=0.5):
     """
@@ -108,7 +110,7 @@ def run_detection():
     frame_nmr = -1
 
     # 2. Mở webcam và thiết lập các thông số
-    cap = cv2.VideoCapture("./file_path/20221003-102700.mp4")
+    cap = cv2.VideoCapture("./file_path/16h.mp4")
 
     output_folder = "./file_path/cropped_license_plates"
     os.makedirs(output_folder, exist_ok=True)
@@ -138,7 +140,7 @@ def run_detection():
             ):
                 x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
                 detection_results.append(
-                    [x1, y1, x2, y2, track_id]
+                    [x1, y1, x2, y2, class_id, track_id]
                 )
 
                 label = f"#{track_id} {class_name} {confidence:.2f}"
@@ -160,7 +162,7 @@ def run_detection():
                 x1_license, y1_license, x2_license, y2_license = xyxy_car[0], xyxy_car[1], xyxy_car[2], xyxy_car[3]
 
                 # assign license plate to car
-                xcar1, ycar1, xcar2, ycar2, car_id = _util.get_car(
+                xcar1, ycar1, xcar2, ycar2, class_id, car_id = _util.get_car(
                     license_plate, detection_results
                 )
 
@@ -172,36 +174,48 @@ def run_detection():
                         :
                     ]
 
-                    # # Lưu ảnh biển số xe đã cắt vào folder
-                    # file_name = f"frame_{frame_nmr}_plate_{license_plate_index}.png"
-                    # save_path = os.path.join(output_folder, file_name)
-                    # cv2.imwrite(save_path, license_plate_crop)
-                    # print(f"Saved cropped license plate: {save_path}")
+                    # Lưu ảnh biển số xe đã cắt vào folder
+                    file_name = f"frame_{frame_nmr}_plate_{license_plate_index}.png"
+                    save_path = os.path.join(output_folder, file_name)
+                    cv2.imwrite(save_path, license_plate_crop)
+                    print(f"Saved cropped license plate: {save_path}")
 
                     # # Process license plate
                     license_plate_crop_gray = cv2.cvtColor(
                         license_plate_crop, cv2.COLOR_BGR2GRAY
                     )
 
-                    # Read license plate number
-                    license_plate_text, license_plate_text_score = (
-                        _util.read_license_plate(license_plate_crop_gray)
-                    )
+                    if class_id == 3:
+                        # Read license plate number
+                        license_plate_text, license_plate_text_score = (
+                            _util.read_license_plate_motobike(license_plate_crop_gray)
+                        )
+                    elif class_id in vehicles_car:
+                        # Read license plate number
+                        license_plate_text, license_plate_text_score = (
+                            _util.read_license_plate_car(license_plate_crop_gray)
+                        )
 
                     if license_plate_text is not None:
                         results[frame_nmr][car_id] = {
                             "car": {"bbox": [xcar1, ycar1, xcar2, ycar2]},
                             "license_plate": {
-                                "bbox": [x1_license, y1_license, x2_license, y2_license],
+                                "bbox": [
+                                    x1_license,
+                                    y1_license,
+                                    x2_license,
+                                    y2_license,
+                                ],
                                 "text": license_plate_text,
                                 "bbox_score": conf_license,
                                 "text_score": license_plate_text_score,
                             },
+                            "class_id": class_id,
                         }
 
             # 6. Hiển thị khung hình
             cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
-            _util.write_csv(results, "./y_test.csv")
+            _util.write_csv(results, "./z_test.csv")
 
             # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
             if cv2.waitKey(1) == ord("q"):
