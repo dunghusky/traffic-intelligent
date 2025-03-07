@@ -173,7 +173,7 @@ def read_license_plate_car(license_plate_crop):
             continue
 
         for detection in detection_group:
-            print("\nTest: ", detection)
+            # print("\nTest: ", detection)
             bbox, (text, score) = detection
 
             # Chuẩn hóa văn bản: Chuyển sang in hoa, loại bỏ khoảng trắng
@@ -182,7 +182,7 @@ def read_license_plate_car(license_plate_crop):
             # Nếu ký tự thứ 7 là dấu chấm (.), loại bỏ ký tự này
             if len(text) > 7 and text[7] == ".":
                 text = text[:7] + text[8:]
-                print("Formatted text without dot: ", text)
+                # print("Formatted text without dot: ", text)
             else:
                 print("No dot found, keeping text as is: ", text)
 
@@ -203,7 +203,7 @@ def read_license_plate_car(license_plate_crop):
     # Loại bỏ dấu chấm nếu cần thiết
     combined_text = combined_text.replace(".", "")
 
-    print("Combined text: ", combined_text)
+    # print("Combined text: ", combined_text)
 
     if license_complies_format_car(combined_text):
         average_score = total_score / len(detected_texts)
@@ -313,10 +313,10 @@ def read_license_plate_motobike(license_plate_crop):
     """
 
     license_plate_crop_thresh = ocr.ocr(license_plate_crop)
-    print("\nlicense_plate_crop_thresh: ", license_plate_crop_thresh)
+    # print("\nlicense_plate_crop_thresh: ", license_plate_crop_thresh)
 
     if not license_plate_crop_thresh:
-        print("No text detected by OCR.")
+        # print("No text detected by OCR.")
         return 0, 0
 
     detected_texts = []
@@ -324,11 +324,11 @@ def read_license_plate_motobike(license_plate_crop):
 
     for detection_group in license_plate_crop_thresh:
         if not detection_group:
-            print("Warning: Detected None in detection group.")
+            # print("Warning: Detected None in detection group.")
             continue
 
         for detection in detection_group:
-            print("\nTest: ", detection)
+            # print("\nTest: ", detection)
             bbox, (text, score) = detection
 
             text = text.upper().replace(" ", "")
@@ -349,7 +349,7 @@ def read_license_plate_motobike(license_plate_crop):
         "-".join(detected_texts) if len(detected_texts) > 1 else detected_texts[0]
     )
 
-    print("Combined text: ", combined_text)
+    # print("Combined text: ", combined_text)
 
     if license_complies_format_motobike(combined_text):
         average_score = total_score / len(detected_texts)
@@ -383,7 +383,10 @@ def get_car(license_plate, vehicle_track_ids):
             break
 
     if foundIt:
-        print("vehicle_track_ids: ", vehicle_track_ids[car_indx])
+        # print("vehicle_track_ids: ", vehicle_track_ids[car_indx])
         return vehicle_track_ids[car_indx]
 
     return -1, -1, -1, -1, -1, -1
+
+
+

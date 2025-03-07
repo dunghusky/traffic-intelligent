@@ -9,6 +9,7 @@ file_path
 
 model/datasets/Vehicle-Registration-Plates-1
 model/train/checkpoints
+model/train/checkpoints_lights
 
 *.csv
 
