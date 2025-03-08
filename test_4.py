@@ -157,6 +157,8 @@ def run_detection():
     box_annatator = sv.BoxAnnotator(thickness=1)
     byte_tracker = sv.ByteTrack()
     label_annotator = sv.LabelAnnotator(text_thickness=2, text_scale=1)
+    LINE_START = sv.Point(200, 0)
+    LINE_END = sv.Point(200, 500)
 
     frame_nmr = -1
 

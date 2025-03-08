@@ -1,5 +1,7 @@
+import os
 import cv2
 import numpy as np
+
 
 def select_polygon_points(video_path):
     def click_event(event, x, y, flags, param):
@@ -33,3 +35,12 @@ def select_polygon_points(video_path):
     print("Tọa độ cho PolygonZone:")
     print(polygon)
     return polygon
+
+
+def save_violation_image(
+    license_plate_crop, license_plate_index, frame_nmr, output_folder
+):
+    file_name = f"frame_{frame_nmr}_plate_{license_plate_index}.png"
+    save_path = os.path.join(output_folder, file_name)
+    cv2.imwrite(save_path, license_plate_crop)
+    print(f"Saved cropped license plate: {save_path}")
