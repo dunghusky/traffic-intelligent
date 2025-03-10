@@ -116,4 +116,4 @@ def detect_image(img_path):
 
 # Chạy chương trình
 if __name__ == "__main__":
-    detect_image("./file_path/frame_18_plate_1.png")
+    detect_image("./file_path/cropped_license_plates_1/frame_24_plate_158.png")

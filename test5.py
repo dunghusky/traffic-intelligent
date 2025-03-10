@@ -1,4 +1,5 @@
 from copy import deepcopy
+import csv
 import os
 import cv2
 import numpy as np
@@ -65,6 +66,7 @@ def run_detection():
     output_folder = "./file_path/cropped_license_plates"
     os.makedirs(output_folder, exist_ok=True)
 
+    vehicles_info = {}
     # 3. Vòng lặp chính để đọc khung hình từ webcam
     while True:
         ret, frame = cap.read()
@@ -88,15 +90,13 @@ def run_detection():
                 frame, coco_model, classes=vehicles
             )
             # print("Detection: ", detections_vehicles)
-            is_detections_in_zone = polygon_zone.trigger(
-                detections_vehicles
-            )
+            is_detections_in_zone = polygon_zone.trigger(detections_vehicles)
             print(polygon_zone.current_count)
 
             detection_results = []
             labels = []
 
-            for vehicle, is_in_zone in zip(detections_vehicles, is_detections_in_zone):
+            for vehicle in detections_vehicles:
                 xyxy, _, conf, class_id, track_id, class_name_dict = (
                     vehicle  # 0: green, 1:red, 2:yellow
                 )
@@ -105,34 +105,19 @@ def run_detection():
 
                 label = f"#{track_id} {class_name} {conf:.2f}"
                 labels.append(label)
-
-                if is_in_zone:
-                    if track_id not in captured_vehicles:
-                        car_crop = frame[
-                            int(y1) : int(y2),
-                            int(x1) : int(x2),
-                            :
-                        ]
-
-                        _points_calculation.save_violation_image(
-                            car_crop, track_id, frame_nmr, output_folder
-                        )
-
-                        # Cập nhật danh sách đã cắt ảnh (track_id, frame cuối thấy xe, kích thước bbox)
-                        captured_vehicles[track_id] = frame_nmr
-
-                        detection_results.append([x1, y1, x2, y2, class_id, track_id])
-
-                    captured_vehicles[track_id] = captured_vehicles[track_id] = (
-                        frame_nmr
-                    )
+                detection_results.append([x1, y1, x2, y2, class_id, track_id])
 
             # # Detect license plates
             license_plates = _detect.detect_objects(frame, detect_license_plate)
             # print("Detection: ", license_plates)
             for license_plate_index, license_plate in enumerate(license_plates):
                 xyxy_car, _, conf_license, class_id_license, _, _ = license_plate
-                x1_license, y1_license, x2_license, y2_license = xyxy_car[0], xyxy_car[1], xyxy_car[2], xyxy_car[3]
+                x1_license, y1_license, x2_license, y2_license = (
+                    xyxy_car[0],
+                    xyxy_car[1],
+                    xyxy_car[2],
+                    xyxy_car[3],
+                )
 
                 # assign license plate to car
                 xcar1, ycar1, xcar2, ycar2, class_id, car_id = _util.get_car(
@@ -144,22 +129,14 @@ def run_detection():
                     license_plate_crop = frame[
                         int(y1_license) : int(y2_license),
                         int(x1_license) : int(x2_license),
-                        :
+                        :,
                     ]
-
-                    # # Lưu ảnh biển số xe đã cắt vào folder
-                    _points_calculation.save_violation_image(
-                        license_plate_crop,
-                        license_plate_index,
-                        frame_nmr,
-                        output_folder,
-                    )
 
                     # # Process license plate
                     license_plate_crop_gray = cv2.cvtColor(
                         license_plate_crop, cv2.COLOR_BGR2GRAY
                     )
-
+                    license_plate_text, license_plate_text_score = None, 0
                     if class_id == 3:
                         # Read license plate number
                         license_plate_text, license_plate_text_score = (
@@ -170,23 +147,42 @@ def run_detection():
                         license_plate_text, license_plate_text_score = (
                             _util.read_license_plate_car(license_plate_crop_gray)
                         )
-
-                    if license_plate_text is not None:
-                        results[frame_nmr][car_id] = {
-                            "car": {"bbox": [xcar1, ycar1, xcar2, ycar2]},
-                            "license_plate": {
-                                "bbox": [
-                                    x1_license,
-                                    y1_license,
-                                    x2_license,
-                                    y2_license,
-                                ],
-                                "text": license_plate_text,
-                                "bbox_score": conf_license,
-                                "text_score": license_plate_text_score,
-                            },
+                    # Nếu xe chưa có trong danh sách, khởi tạo dữ liệu
+                    if car_id not in vehicles_info:
+                        vehicles_info[car_id] = {
                             "class_id": class_id,
+                            "bbox_car": [xcar1, ycar1, xcar2, ycar2],
+                            "bbox_plate": None,  # Chưa có biển số
+                            "plate_text": None,  # Chưa OCR được
+                            "plate_score": 0.0,  # Giá trị mặc định
+                            "track_id": car_id,
                         }
+
+                    if (
+                        license_plate_text
+                        and license_plate_text.strip()
+                        and license_plate_text_score
+                        > vehicles_info[car_id]["plate_score"]
+                    ):
+                        vehicles_info[car_id]["plate_text"] = license_plate_text
+                        vehicles_info[car_id]["plate_score"] = license_plate_text_score
+                        vehicles_info[car_id]["bbox_plate"] = [x1_license, y1_license, x2_license, y2_license]
+
+                        # results[frame_nmr][car_id] = {
+                        #     "car": {"bbox": [xcar1, ycar1, xcar2, ycar2]},
+                        #     "license_plate": {
+                        #         "bbox": [
+                        #             x1_license,
+                        #             y1_license,
+                        #             x2_license,
+                        #             y2_license,
+                        #         ],
+                        #         "text": license_plate_text,
+                        #         "bbox_score": conf_license,
+                        #         "text_score": license_plate_text_score,
+                        #     },
+                        #     "class_id": class_id,
+                        # }
 
             annotated_frame = box_annatator.annotate(
                 detections=detections_vehicles, scene=frame
@@ -197,9 +193,7 @@ def run_detection():
             )
 
             # annotated_frame = line_ana.annotate(frame=frame, line_counter=line_zone)
-            annotated_frame = polygon_zone_ana.annotate(
-                scene=frame
-            )
+            annotated_frame = polygon_zone_ana.annotate(scene=frame)
 
             # Xóa track_id cũ không còn thấy sau X frame để tránh trùng ID
             expired_ids = [
@@ -213,7 +207,23 @@ def run_detection():
 
             # 6. Hiển thị khung hình
             cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
-            _util.write_csv(results, "./z_test.csv")
+            # _util.write_csv(results, "./z_test.csv")
+
+            with open("vehicles_info_log.csv", "w", newline="", encoding="utf-8") as file:
+                writer = csv.writer(file)
+                writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score"])
+
+                for car_id, data in vehicles_info.items():
+                    writer.writerow([
+                        car_id,
+                        data["class_id"],
+                        data["bbox_car"],
+                        data["bbox_plate"],
+                        data["plate_text"],
+                        data["plate_score"]
+                    ])
+
+                print("🚀 Đã lưu vehicles_info vào vehicles_info_log.csv")
 
             # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
             if cv2.waitKey(1) == ord("q"):

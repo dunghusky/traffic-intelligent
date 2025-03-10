@@ -2,7 +2,7 @@ import supervision as sv
 
 from collections import deque
 
-def detect_objects(frame, model, conf=0.1, iou=0.5):
+def detect_objects(frame, model, conf=0.05, iou=0.5):
     """
     Nhận diện vật thể trên khung hình hiện tại.
     Args:
@@ -18,7 +18,7 @@ def detect_objects(frame, model, conf=0.1, iou=0.5):
     return detections
 
 
-def objects_tracking(frame, model, conf=0.01, iou=0.5, classes=None):
+def objects_tracking(frame, model, conf=0.1, iou=0.5, classes=None):
     """
     Nhận diện vật thể trên khung hình hiện tại.
     Args:
