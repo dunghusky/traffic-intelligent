@@ -18,6 +18,10 @@ vehicles_car = [2, 5, 7]
 
 BUFFER_SIZE = 30
 
+# device = "cuda:2" if torch.cuda.is_available() else "cpu"
+# print("Thiết bị đang được sử dụng:", device)
+
+# model = YOLO(model_path).to(device)
 
 def run_detection():
     """
@@ -51,6 +55,7 @@ def run_detection():
     in_count = 0
 
     violating_vehicles = {}
+    printed_ids = set()
 
     polygon = np.array(
         [
@@ -195,36 +200,50 @@ def run_detection():
             # annotated_frame = line_ana.annotate(frame=frame, line_counter=line_zone)
             annotated_frame = polygon_zone_ana.annotate(scene=frame)
 
-            # Xóa track_id cũ không còn thấy sau X frame để tránh trùng ID
-            expired_ids = [
-                tid
-                for tid, last_frame in captured_vehicles.items()
-                if frame_nmr - last_frame > FRAME_EXPIRATION
-            ]
-            for tid in expired_ids:
-                print(f"Xóa track_id {tid} do đã quá {FRAME_EXPIRATION} frame.")
-                del captured_vehicles[tid]
+            for vehicle, in_zone in zip(detections_vehicles, is_detections_in_zone):
+                xyxy, _, conf, class_id, track_id, _ = vehicle
+                if (
+                    in_zone
+                    and track_id in vehicles_info
+                    and vehicles_info[track_id]["plate_text"]
+                ):
+                    if track_id not in violating_vehicles:
+                        violating_vehicles[track_id] = vehicles_info[track_id]
+                        # In thông báo hoặc thực hiện xử lý vi phạm
+                        # print("Xe vi phạm zone:", vehicles_info[track_id])
 
             # 6. Hiển thị khung hình
             cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
             # _util.write_csv(results, "./z_test.csv")
 
-            with open("vehicles_info_log.csv", "w", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-                writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score"])
+            # with open("vehicles_info_log.csv", "w", newline="", encoding="utf-8") as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score"])
 
-                for car_id, data in vehicles_info.items():
-                    writer.writerow([
-                        car_id,
-                        data["class_id"],
-                        data["bbox_car"],
-                        data["bbox_plate"],
-                        data["plate_text"],
-                        data["plate_score"]
-                    ])
+            #     for car_id, data in vehicles_info.items():
+            #         writer.writerow([
+            #             car_id,
+            #             data["class_id"],
+            #             data["bbox_car"],
+            #             data["bbox_plate"],
+            #             data["plate_text"],
+            #             data["plate_score"]
+            #         ])
 
-                print("🚀 Đã lưu vehicles_info vào vehicles_info_log.csv")
+            # with open("vehicles_info_log_text.csv", "w", newline="", encoding="utf-8") as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score"])
 
+            #     for car_id, data in violating_vehicles.items():
+            #         writer.writerow([
+            #             car_id,
+            #             data["class_id"],
+            #             data["bbox_car"],
+            #             data["bbox_plate"],
+            #             data["plate_text"],
+            #             data["plate_score"]
+            #         ])
+                    
             # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
             if cv2.waitKey(1) == ord("q"):
                 break

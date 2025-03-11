@@ -33,6 +33,31 @@ def objects_tracking(frame, model, conf=0.1, iou=0.5, classes=None):
     detections = sv.Detections.from_ultralytics(results)
     return detections
 
+
+def draw_boxes(
+    frame, detections, labels, box_annotator, lables_annotator, polygon_zone_annotator
+):
+
+    frame = box_annotator.annotate(detections=detections, scene=frame)
+
+    frame = lables_annotator.annotate(labels=labels, scene=frame, detections=detections)
+
+    frame = polygon_zone_annotator.annotate(scene=frame)
+
+    return frame
+
+
+def initialize_and_annotators(polygon):
+
+    box_annotator = sv.BoxAnnotator(thickness=1)
+    label_annotator = sv.LabelAnnotator(text_thickness=2, text_scale=1)
+    polygon_zone = sv.PolygonZone(polygon=polygon)
+    polygon_zone_annotator = sv.PolygonZoneAnnotator(zone=polygon_zone, thickness=1)
+    # line_counter = sv.LineZone(start=LINE_START, end=LINE_END)
+    # line_annotator = sv.LineZoneAnnotator(thickness=2, text_thickness=0, text_scale=0)
+    return (box_annotator, label_annotator, polygon_zone, polygon_zone_annotator)
+
+
 # def detect_traffic_light(
 #     traffic_lights, existing_traffic_lights=None
 # ):  # (array([     1371.7,      274.18,      1432.8,      407.35], dtype=float32), None, 0.9041419, 0, 1, {'class_name': 'Green'})

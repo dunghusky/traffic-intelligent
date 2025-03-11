@@ -161,7 +161,7 @@ def read_license_plate_car(license_plate_crop):
 
     # Kiểm tra nếu kết quả OCR trả về None hoặc rỗng
     if not license_plate_crop_thresh:
-        print("No text detected by OCR.")
+        # print("No text detected by OCR.")
         return 0, 0
 
     detected_texts = []
@@ -335,14 +335,14 @@ def read_license_plate_motobike(license_plate_crop):
 
             # Loại bỏ dấu chấm nếu có
             text = text.replace(".", "")
-            print("Formatted text without dot: ", text)
+            # print("Formatted text without dot: ", text)
 
             if text and score > 0.5:
                 detected_texts.append(text)
                 total_score += score
 
     if not detected_texts:
-        print("No valid text detected.")
+        # print("No valid text detected.")
         return 0, 0
 
     combined_text = (
