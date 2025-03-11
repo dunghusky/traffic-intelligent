@@ -50,7 +50,7 @@ def draw_boxes(
 def initialize_and_annotators(polygon):
 
     box_annotator = sv.BoxAnnotator(thickness=1)
-    label_annotator = sv.LabelAnnotator(text_thickness=2, text_scale=1)
+    label_annotator = sv.LabelAnnotator(text_thickness=1, text_scale=1)
     polygon_zone = sv.PolygonZone(polygon=polygon)
     polygon_zone_annotator = sv.PolygonZoneAnnotator(zone=polygon_zone, thickness=1)
     # line_counter = sv.LineZone(start=LINE_START, end=LINE_END)
@@ -94,16 +94,16 @@ def detect_traffic_light(
     if existing_buffer is None:
         existing_buffer = deque(maxlen=BUFFER_SIZE)
 
-    labels = []
+    # labels = []
     updated_states = {}
     for traffic_light in traffic_lights:
         xyxy, _, conf_license, class_id_license, track_id, class_name = (
             traffic_light  # 0: green, 1:red, 2:yellow
         )
         class_name = class_name.get("class_name", None)
-        # x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
-        label = label = f"#{track_id} {class_name} {conf_license:.2f}"
-        labels.append(label)
+        # # x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
+        # label = label = f"#{track_id} {class_name} {conf_license:.2f}"
+        # labels.append(label)
 
         updated_states[track_id] = class_name
         existing_buffer.append((track_id, class_name))
@@ -117,4 +117,4 @@ def detect_traffic_light(
         if track_id not in updated_states:
             updated_states[track_id] = state
 
-    return updated_states, existing_buffer, labels
+    return updated_states, existing_buffer

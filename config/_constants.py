@@ -18,7 +18,7 @@ TRAFFIC_LIGHT_MODEL = "./model/train/checkpoints_lights/train/weights/best.pt"
 # --------------------STORAGE PATH------------------------#
 LICENSE_IMAGES = "./file_path/cropped_license_plates"
 
-VIDEO_DETECT = "./file_path/16h15.25.9.22.mp4"
+VIDEO_DETECT = "./file_path/16h15.5.9.22.mp4"
 
 # --------------------POINT------------------------#
 POINT_START = sv.Point(0, 861)
