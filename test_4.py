@@ -11,6 +11,6 @@ model = YOLO(
 )
 
 result = model.predict("https://ultralytics.com/images/bus.jpg")
-detections = sv.Detections.from_ultralytics(result)
+# detections = sv.Detections.from_ultralytics(result)
 print("\nresult: ", result)
-print("\ndetections: ", detections)
+# print("\ndetections: ", detections)
