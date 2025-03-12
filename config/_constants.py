@@ -14,6 +14,8 @@ LICENSE_PLATE_MODEL = "./model/train/checkpoints/train/weights/best.pt"
 
 TRAFFIC_LIGHT_MODEL = "./model/train/checkpoints_lights/train/weights/best.pt"
 
+LICENSE_PLATE_MODEL_VPS = "/home/ubuntu/mekongai/test_intelligent/traffic-intelligent/model/train/checkpoints/train/weights/best.pt"
+
 # --------------------STORAGE PATH------------------------#
 LICENSE_IMAGES = "./file_path/cropped_license_plates"
 
