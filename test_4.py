@@ -10,7 +10,7 @@ model = YOLO(
     task="detect",
 )
 
-result = model.track("https://ultralytics.com/images/bus.jpg", device=2)
+result = model.track("https://ultralytics.com/images/bus.jpg", device=3)
 detections = sv.Detections.from_ultralytics(result)
 print("\nresult: ", result)
 print("\ndetections: ", detections)
