@@ -2,7 +2,8 @@ import supervision as sv
 
 from collections import deque
 
-def detect_objects(frame, model, conf=0.05, iou=0.5):
+
+def detect_objects(frame, model, conf=0.1, iou=0.5, classes=None):
     """
     Nhận diện vật thể trên khung hình hiện tại.
     Args:
@@ -13,7 +14,7 @@ def detect_objects(frame, model, conf=0.05, iou=0.5):
     - detections: Kết quả nhận diện.
     """
     # results = model(frame)[0]
-    results = model.predict(frame, conf=conf, iou=iou)[0]
+    results = model.predict(frame, conf=conf, iou=iou, classes=classes)[0]
     detections = sv.Detections.from_ultralytics(results)
     return detections
 
@@ -42,7 +43,7 @@ def draw_boxes(
 
     frame = lables_annotator.annotate(labels=labels, scene=frame, detections=detections)
 
-    frame = polygon_zone_annotator.annotate(scene=frame)
+    # frame = polygon_zone_annotator.annotate(scene=frame)
 
     return frame
 

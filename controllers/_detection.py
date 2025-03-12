@@ -63,14 +63,15 @@ def run_detection():
             print("Không nhận được khung hình (frame). Kết nối có thể đã bị ngắt.")
             return frame
         else:
-            # detection_lights = objects_tracking(frame, detect_light)
-            # traffic_lights, existing_traffic_light_buffer, lab = detect_traffic_light(
-            #     detection_lights, existing_traffic_light_buffer
-            # )
-            # if not traffic_lights:
-            #     print("Không phát hiện được đèn giao thông, sử dụng trạng thái mặc định: Unknown")
-            #     traffic_lights = {"default": "Unknown"}
-            # print("Test: ", traffic_lights)
+            detection_lights = _detect.objects_tracking(frame, detect_light)
+            traffic_lights, existing_traffic_light_buffer = (
+                _detect.detect_traffic_light(
+                    detection_lights, existing_traffic_light_buffer
+                )
+            )
+            if not traffic_lights:
+                traffic_lights = {"default": "Unknown"}
+            is_red_light = traffic_lights.get(1, "Unknown") == "Red"
 
             detection_results = []
             labels = []
@@ -176,8 +177,11 @@ def run_detection():
                     and track_id in vehicles_info
                     and vehicles_info[track_id]["plate_text"]
                 ):
-                    if track_id not in violating_vehicle_ids:
-                        violating_vehicles[track_id] = vehicles_info[track_id]
+                    is_zone = is_red_light
+                    # Nếu xe chưa có trong danh sách vi phạm, khởi tạo và thêm is_zone
+                    if track_id not in violating_vehicles:
+                        violating_vehicles[track_id] = vehicles_info[track_id].copy()
+                        violating_vehicles[track_id]["is_zone"] = is_zone
                         violating_vehicle_ids.add(track_id)
 
             expired_ids = [
@@ -192,9 +196,24 @@ def run_detection():
                     del vehicles_info[tid]
                     violating_vehicle_ids.remove(tid)
 
+            # with open("vehicles_info_log_text_1.csv", "w", newline="", encoding="utf-8") as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score", "is_zone"])
+
+            #     for car_id, data in violating_vehicles.items():
+            #         writer.writerow(
+            #             [
+            #                 car_id,
+            #                 data["class_id"],
+            #                 data["bbox_car"],
+            #                 data["bbox_plate"],
+            #                 data["plate_text"],
+            #                 data["plate_score"],
+            #                 data["is_zone"],
+            #             ]
+            #         )
             # 6. Hiển thị khung hình
             cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
-            # _util.write_csv(results, "./z_test.csv")
 
             # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
             if cv2.waitKey(1) == ord("q"):
@@ -202,3 +221,8 @@ def run_detection():
 
     cap.release()
     cv2.destroyAllWindows()
+
+
+# Chạy chương trình
+if __name__ == "__main__":
+    run_detection()

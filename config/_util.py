@@ -169,7 +169,7 @@ def read_license_plate_car(license_plate_crop):
 
     for detection_group in license_plate_crop_thresh:
         if not detection_group:
-            print("Warning: Detected None in detection group.")
+            # print("Warning: Detected None in detection group.")
             continue
 
         for detection in detection_group:
@@ -183,8 +183,8 @@ def read_license_plate_car(license_plate_crop):
             if len(text) > 7 and text[7] == ".":
                 text = text[:7] + text[8:]
                 # print("Formatted text without dot: ", text)
-            else:
-                print("No dot found, keeping text as is: ", text)
+            # else:
+            #     print("No dot found, keeping text as is: ", text)
 
             # Thêm văn bản vào danh sách nếu không rỗng
             if text and score > 0.5:  # Chỉ lấy các kết quả có độ tin cậy cao hơn 0.5
@@ -192,7 +192,7 @@ def read_license_plate_car(license_plate_crop):
                 total_score += score
 
     if not detected_texts:
-        print("No valid text detected.")
+        # print("No valid text detected.")
         return 0, 0
 
     # Ghép các phần tử thành một chuỗi duy nhất
