@@ -7,7 +7,6 @@ CHECKPOINT_PATH = "/home/ubuntu/mekongai/test_intelligent/traffic-intelligent/mo
 DATA_PATH_LIGHT = "/home/ubuntu/mekongai/test_intelligent/traffic-intelligent/model/datasets/v5-1/data.yaml"
 CHECKPOINT_PATH_1 = "/home/ubuntu/mekongai/test_intelligent/traffic-intelligent/model/train/checkpoints_lights"
 
-
 # --------------------MODEL PATH------------------------#
 COCO_MODEL = "yolo11n.pt"
 
