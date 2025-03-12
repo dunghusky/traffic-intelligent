@@ -9,7 +9,7 @@ model = YOLO(
     "/home/ubuntu/mekongai/test_intelligent/traffic-intelligent/model/model_export/model_tensorRT/yolo11n.engine",
 )
 
-result = model.predict("https://ultralytics.com/images/bus.jpg")
+result = model.track("https://ultralytics.com/images/bus.jpg")[0]
 print("\nresult: ", result)
 
 detections = sv.Detections.from_ultralytics(result)
