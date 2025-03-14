@@ -10,8 +10,7 @@ import yaml
 SERVER_CONFIG = {"protocols": ["tcp"], "paths": {"all": {"source": "publisher"}}}
 BASE_STREAM_URL = "rtsp://localhost:8554/live"
 
-# python test_6.py --video_directory "./file_path/16h" --number_of_streams 1
-# ffmpeg -re -stream_loop -1 -i "E:/Work/traffic-intelligent/file_path/16h15.5.9.22.mp4" -threads 1 -c:v libx264 -f flv rtmp://35.94.42.185:1256/liveđược đâu
+
 def main(video_directory: str, number_of_streams: int) -> None:
     video_files = find_video_files_in_directory(video_directory, number_of_streams)
     try:
