@@ -1,16 +1,35 @@
-import torch
-from ultralytics import YOLO
-from config import _constants
-import supervision as sv
+from numba import cuda
+import numpy as np
+import time
 
-device = "cuda:2" if torch.cuda.is_available() else "cpu"
-print("Thiết bị đang được sử dụng:", device)
-model = YOLO(
-    "/home/ubuntu/mekongai/test_intelligent/traffic-intelligent/model/model_export/model_tensorRT/yolo11n.engine",
-)
 
-result = model.track("https://ultralytics.com/images/bus.jpg")[0]
-print("\nresult: ", result)
+# Hàm chạy trên GPU
+@cuda.jit
+def counter_gpu(arr):
+    idx = cuda.grid(1)  # Lấy chỉ số của thread
+    if idx < arr.size:
+        arr[idx] += 1  # Mỗi thread xử lý một phần tử
 
-detections = sv.Detections.from_ultralytics(result)
-print("\ndetections: ", detections)
+
+def main():
+    num_elements = 250_000_000  # Số vòng lặp (250 triệu)
+    arr = np.zeros(num_elements, dtype=np.int32)  # Mảng số 0
+
+    # Cấu hình GPU
+    threads_per_block = 1024  # Số thread mỗi block
+    blocks_per_grid = (
+        num_elements + (threads_per_block - 1)
+    ) // threads_per_block  # Số block cần thiết
+
+    # Chạy trên GPU
+    start = time.perf_counter()
+    counter_gpu[blocks_per_grid, threads_per_block](arr)  # Khởi chạy kernel trên GPU
+    cuda.synchronize()  # Đồng bộ GPU và CPU
+    end = time.perf_counter()
+
+    print("PROCESSING on GPU")
+    print("done in:", int(end - start), "Seconds")
+
+
+if __name__ == "__main__":
+    main()

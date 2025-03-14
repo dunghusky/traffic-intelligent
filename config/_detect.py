@@ -43,7 +43,7 @@ def draw_boxes(
 
     frame = lables_annotator.annotate(labels=labels, scene=frame, detections=detections)
 
-    # frame = polygon_zone_annotator.annotate(scene=frame)
+    frame = polygon_zone_annotator.annotate(scene=frame)
 
     return frame
 

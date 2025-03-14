@@ -1,18 +1,18 @@
+from copy import deepcopy
+import csv
 import os
 import cv2
-
 import numpy as np
-import supervision as sv
-import torch
+
 from ultralytics import YOLO
+import supervision as sv
+from ultralytics.utils.plotting import Annotator
 from config import _util
 from collections import deque
 from config import _detect, _constants
 
-from deep_sort_realtime.deepsort_tracker import DeepSort
-
-device = "cuda:2" if torch.cuda.is_available() else "cpu"
-print("Thiết bị đang được sử dụng:", device)
+# device = "cuda:2" if torch.cuda.is_available() else "cpu"
+# print("Thiết bị đang được sử dụng:", device)
 
 # model = YOLO(model_path).to(device)
 
@@ -22,18 +22,11 @@ vehicles_car = _constants.CAR
 buffer_size = _constants.BUFFER_SIZE
 
 # 1. Khởi tạo mô hình YOLO và BoxAnnotator
-coco_model = YOLO(_constants.COCO_MODEL).to(device)
-detect_license_plate = YOLO(_constants.LICENSE_PLATE_MODEL).to(device)
-detect_light = YOLO(_constants.TRAFFIC_LIGHT_MODEL).to(device)
+coco_model = YOLO(_constants.COCO_MODEL)
+detect_license_plate = YOLO(_constants.LICENSE_PLATE_MODEL)
+detect_light = YOLO(_constants.TRAFFIC_LIGHT_MODEL)
 
-# tracker = DeepSort(max_age=30, polygon=True)
-tracker = sv.ByteTrack(lost_track_buffer=30)
 
-# Load classname từ file classes.names
-with open("./file_path/classes.names") as f:
-    class_names = f.read().strip().split("\n")
-
-colors = np.random.randint(0, 255, size=(len(class_names), 3))
 def run_detection():
     """
     Hàm chính để thực hiện nhận diện trên webcam và hiển thị kết quả.
@@ -71,24 +64,23 @@ def run_detection():
             return frame
         else:
             detection_lights = _detect.objects_tracking(frame, detect_light)
-            traffic_lights, existing_traffic_light_buffer= _detect.detect_traffic_light(
-                detection_lights, existing_traffic_light_buffer
+            traffic_lights, existing_traffic_light_buffer = (
+                _detect.detect_traffic_light(
+                    detection_lights, existing_traffic_light_buffer
+                )
             )
             if not traffic_lights:
                 traffic_lights = {"default": "Unknown"}
             is_red_light = traffic_lights.get(1, "Unknown") == "Red"
 
             detection_results = []
-            detection_results_update_tracker = []
             labels = []
 
-            detections_vehicles = _detect.detect_objects(
+            detections_vehicles = _detect.objects_tracking(
                 frame, coco_model, classes=vehicles
             )
 
-            detections_vehicles = tracker.update_with_detections(detections=detections_vehicles)
-            # print("det: ", detections_vehicles)
-
+            is_detections_in_zone = polygon_zone.trigger(detections_vehicles)
             # print(polygon_zone.current_count)
 
             for vehicle in detections_vehicles:
@@ -99,27 +91,9 @@ def run_detection():
                 class_name = class_name_dict.get("class_name", None)
 
                 label = f"#{track_id} {class_name} {conf:.2f}"
-                # label = f"#{class_name} {conf:.2f}"
                 labels.append(label)
-                # detection_results.append(([x1, y1, x2 - x1, y2 - y1], conf, class_id))
                 detection_results.append([x1, y1, x2, y2, class_id, track_id])
-                # captured_vehicles[track_id] = frame_nmr
-
-            # tracks = tracker.update_tracks(detection_results, frame=frame)
-
-            is_detections_in_zone = polygon_zone.trigger(detections_vehicles)
-
-            # for track in tracks:
-            #     if not track.is_confirmed():
-            #         continue  # Bỏ qua track chưa đủ ổn định
-            #     track_id = track.track_id
-            #     class_id = track.get_det_class()
-            #     bbox = track.to_tlbr()  # (x1, y1, x2, y2)
-            #     # class_namess = class_names[class_id]
-            #     x1_track, y1_track, x2_track, y2_track = bbox[0], bbox[1], bbox[2], bbox[3]
-            #     detection_results_update_tracker.append(
-            #         [x1_track, y1_track, x2_track, y2_track, class_id, track_id]
-            #     )
+                captured_vehicles[track_id] = frame_nmr
 
             # # Detect license plates
             license_plates = _detect.detect_objects(frame, detect_license_plate)
@@ -169,7 +143,7 @@ def run_detection():
                             "bbox_plate": None,  # Chưa có biển số
                             "plate_text": None,  # Chưa OCR được
                             "plate_score": 0.0,  # Giá trị mặc định
-                            "track_id": car_id
+                            "track_id": car_id,
                         }
 
                     if (
@@ -222,6 +196,22 @@ def run_detection():
                     del vehicles_info[tid]
                     violating_vehicle_ids.remove(tid)
 
+            # with open("vehicles_info_log_text_1.csv", "w", newline="", encoding="utf-8") as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score", "is_zone"])
+
+            #     for car_id, data in violating_vehicles.items():
+            #         writer.writerow(
+            #             [
+            #                 car_id,
+            #                 data["class_id"],
+            #                 data["bbox_car"],
+            #                 data["bbox_plate"],
+            #                 data["plate_text"],
+            #                 data["plate_score"],
+            #                 data["is_zone"],
+            #             ]
+            #         )
             # 6. Hiển thị khung hình
             cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
 
