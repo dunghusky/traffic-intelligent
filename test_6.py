@@ -1,105 +1,250 @@
-import argparse
+from copy import deepcopy
+import csv
 import os
-import subprocess
-import tempfile
-from glob import glob
-from threading import Thread
+from typing import List
+import cv2
+import numpy as np
 
-import yaml
+from inference import InferencePipeline
+from inference.core.interfaces.camera.entities import VideoFrame
+from ultralytics import YOLO
+import supervision as sv
+from ultralytics.utils.plotting import Annotator
+from config import _util
+from collections import deque
+from config import _detect, _constants
 
-SERVER_CONFIG = {"protocols": ["tcp"], "paths": {"all": {"source": "publisher"}}}
-BASE_STREAM_URL = "rtsp://localhost:8554/live"
+from utils_dt.general import find_in_list, load_zones_config
+from utils_dt.timers import ClockBasedTimer
 
-# python test_6.py --video_directory "./file_path/16h" --number_of_streams 1
-# ffmpeg -re -stream_loop -1 -i "E:/Work/traffic-intelligent/file_path/16h15.5.9.22.mp4" -threads 1 -c:v libx264 -f flv rtmp://35.94.42.185:1256/liveđược đâu
-def main(video_directory: str, number_of_streams: int) -> None:
-    video_files = find_video_files_in_directory(video_directory, number_of_streams)
-    try:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            config_file_path = create_server_config_file(temporary_directory)
-            run_rtsp_server(config_path=config_file_path)
-            stream_videos(video_files)
-    finally:
-        stop_rtsp_server()
+# device = "cuda:2" if torch.cuda.is_available() else "cpu"
+# print("Thiết bị đang được sử dụng:", device)
 
+# model = YOLO(model_path).to(device)
 
-def find_video_files_in_directory(directory: str, limit: int) -> list:
-    video_formats = ["*.mp4", "*.webm"]
-    video_paths = []
-    for video_format in video_formats:
-        video_paths.extend(glob(os.path.join(directory, video_format)))
-    return video_paths[:limit]
+vehicles = _constants.VEHICLES
+vehicles_car = _constants.CAR
 
+buffer_size = _constants.BUFFER_SIZE
 
-def create_server_config_file(directory: str) -> str:
-    config_path = os.path.join(directory, "rtsp-simple-server.yml")
-    with open(config_path, "w") as config_file:
-        yaml.dump(SERVER_CONFIG, config_file)
-    return config_path
+# 1. Khởi tạo mô hình YOLO và BoxAnnotator
+coco_model = YOLO(_constants.COCO_MODEL)
+detect_license_plate = YOLO(_constants.LICENSE_PLATE_MODEL)
+detect_light = YOLO(_constants.TRAFFIC_LIGHT_MODEL)
 
 
-def run_rtsp_server(config_path: str) -> None:
-    command = (
-        "docker run --rm --name rtsp_server -d -v "
-        f"{config_path}:/rtsp-simple-server.yml -p 8554:8554 "
-        "aler9/rtsp-simple-server:v1.3.0"
+#  ffmpeg -hwaccel cuda -re -stream_loop -1 -i "/home/ubuntu/mekongai/test_intelligent/traffic-intelligent/file_path/20221003-102700.mp4" -c:v h264_nvenc -pix_fmt yuv420p -preset llhp -b:v 4M -bufsize 8M -maxrate 4M -f flv rtmp://35.94.42.185:1256/live
+
+
+def run_detection():
+    """
+    Hàm chính để thực hiện nhận diện trên webcam và hiển thị kết quả.
+    """
+    violating_vehicles = {}
+    vehicles_info = {}
+    captured_vehicles = {}
+
+    # existing_traffic_lights = {}
+
+    violating_vehicle_ids = set()  # Lưu danh sách track_id xe vi phạm
+
+    polygon = _constants.POLYZONE
+    box_annotator, label_annotator, polygon_zone, polygon_zone_annotator = (
+        _detect.initialize_and_annotators(polygon)
     )
-    if run_command(command.split()) != 0:
-        raise RuntimeError("Could not start the RTSP server!")
+
+    frame_nmr = -1
+    frame_expiration = _constants.FRAME_EXPIRATION
+
+    cap = cv2.VideoCapture(_constants.VIDEO_DETECT)
+
+    existing_traffic_light_buffer = deque(maxlen=buffer_size)
+
+    output_folder = _constants.LICENSE_IMAGES
+    os.makedirs(output_folder, exist_ok=True)
+
+    # 3. Vòng lặp chính để đọc khung hình từ webcam
+    while True:
+        ret, frame = cap.read()
+
+        frame_nmr += 1
+        if not ret:
+            print("Không nhận được khung hình (frame). Kết nối có thể đã bị ngắt.")
+            return frame
+        else:
+            detection_lights = _detect.objects_tracking(frame, detect_light)
+            traffic_lights, existing_traffic_light_buffer = (
+                _detect.detect_traffic_light(
+                    detection_lights, existing_traffic_light_buffer
+                )
+            )
+            if not traffic_lights:
+                traffic_lights = {"default": "Unknown"}
+            is_red_light = traffic_lights.get(1, "Unknown") == "Green"
+
+            detection_results = []
+            labels = []
+
+            detections_vehicles = _detect.objects_tracking(
+                frame, coco_model, classes=vehicles
+            )
+
+            is_detections_in_zone = polygon_zone.trigger(detections_vehicles)
+            # print(polygon_zone.current_count)
+
+            for vehicle in detections_vehicles:
+                xyxy, _, conf, class_id, track_id, class_name_dict = (
+                    vehicle  # 0: green, 1:red, 2:yellow
+                )
+                x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
+                class_name = class_name_dict.get("class_name", None)
+
+                label = f"#{track_id} {class_name} {conf:.2f}"
+                labels.append(label)
+                detection_results.append([x1, y1, x2, y2, class_id, track_id])
+                captured_vehicles[track_id] = frame_nmr
+
+            # # Detect license plates
+            license_plates = _detect.detect_objects(frame, detect_license_plate)
+            # print("Detection: ", license_plates)
+            for license_plate_index, license_plate in enumerate(license_plates):
+                xyxy_car, _, conf_license, class_id_license, _, _ = license_plate
+                x1_license, y1_license, x2_license, y2_license = (
+                    xyxy_car[0],
+                    xyxy_car[1],
+                    xyxy_car[2],
+                    xyxy_car[3],
+                )
+
+                # assign license plate to car
+                xcar1, ycar1, xcar2, ycar2, class_id, car_id = _util.get_car(
+                    license_plate, detection_results
+                )
+
+                if car_id != -1:
+                    # Crop license plate
+                    license_plate_crop = frame[
+                        int(y1_license) : int(y2_license),
+                        int(x1_license) : int(x2_license),
+                        :,
+                    ]
+
+                    # # Process license plate
+                    license_plate_crop_gray = cv2.cvtColor(
+                        license_plate_crop, cv2.COLOR_BGR2GRAY
+                    )
+                    license_plate_text, license_plate_text_score = None, 0
+                    if class_id == 3:
+                        # Read license plate number
+                        license_plate_text, license_plate_text_score = (
+                            _util.read_license_plate_motobike(license_plate_crop_gray)
+                        )
+                    elif class_id in vehicles_car:
+                        # Read license plate number
+                        license_plate_text, license_plate_text_score = (
+                            _util.read_license_plate_car(license_plate_crop_gray)
+                        )
+                    # Nếu xe chưa có trong danh sách, khởi tạo dữ liệu
+                    if car_id not in vehicles_info:
+                        vehicles_info[car_id] = {
+                            "class_id": class_id,
+                            "bbox_car": [xcar1, ycar1, xcar2, ycar2],
+                            "bbox_plate": None,  # Chưa có biển số
+                            "plate_text": None,  # Chưa OCR được
+                            "plate_score": 0.0,  # Giá trị mặc định
+                            "track_id": car_id,
+                        }
+
+                    if (
+                        license_plate_text
+                        and license_plate_text.strip()
+                        and license_plate_text_score
+                        > vehicles_info[car_id]["plate_score"]
+                    ):
+                        vehicles_info[car_id]["plate_text"] = license_plate_text
+                        vehicles_info[car_id]["plate_score"] = license_plate_text_score
+                        vehicles_info[car_id]["bbox_plate"] = [
+                            x1_license,
+                            y1_license,
+                            x2_license,
+                            y2_license,
+                        ]
+            annotated_frame = _detect.draw_boxes(
+                frame,
+                detections_vehicles,
+                labels,
+                box_annotator,
+                label_annotator,
+                polygon_zone_annotator,
+            )
+            for vehicle, in_zone in zip(detections_vehicles, is_detections_in_zone):
+                xyxy, _, conf, class_id, track_id, _ = vehicle
+                if (
+                    in_zone
+                    and track_id in vehicles_info
+                    and vehicles_info[track_id]["plate_text"]
+                ):
+                    is_zone = is_red_light
+                    # Nếu xe chưa có trong danh sách vi phạm, khởi tạo và thêm is_zone
+                    if track_id not in violating_vehicles:
+                        violating_vehicles[track_id] = vehicles_info[track_id].copy()
+                        violating_vehicles[track_id]["is_zone"] = is_zone
+                        violating_vehicle_ids.add(track_id)
+
+            expired_ids = [
+                tid
+                for tid, last_frame in captured_vehicles.items()
+                if frame_nmr - last_frame > frame_expiration
+            ]
+            for tid in expired_ids:
+                print(f"Xóa track_id {tid} do đã quá {frame_expiration} frame.")
+                del captured_vehicles[tid]
+                if tid in vehicles_info:
+                    del vehicles_info[tid]
+                    violating_vehicle_ids.remove(tid)
+
+            # with open("vehicles_info.csv", "w", newline="", encoding="utf-8") as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score"])
+
+            #     for car_id, data in vehicles_info.items():
+            #         writer.writerow(
+            #             [
+            #                 car_id,
+            #                 data["class_id"],
+            #                 data["bbox_car"],
+            #                 data["bbox_plate"],
+            #                 data["plate_text"],
+            #                 data["plate_score"],
+            #             ]
+            #         )
+            # with open("vehicles_info_log_text_1.csv", "w", newline="", encoding="utf-8") as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score", "is_zone"])
+
+            #     for car_id, data in violating_vehicles.items():
+            #         writer.writerow(
+            #             [
+            #                 car_id,
+            #                 data["class_id"],
+            #                 data["bbox_car"],
+            #                 data["bbox_plate"],
+            #                 data["plate_text"],
+            #                 data["plate_score"],
+            #                 data["is_zone"],
+            #             ]
+            #         )
+            # 6. Hiển thị khung hình
+            cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
+
+            # Nhấn phím ESC (mã ASCII 27) để thoát khỏi cửa sổ
+            if cv2.waitKey(1) == ord("q"):
+                break
+
+    cap.release()
+    cv2.destroyAllWindows()
 
 
-def stop_rtsp_server() -> None:
-    run_command("docker kill rtsp_server".split())
-
-
-def stream_videos(video_files: list) -> None:
-    threads = []
-    for index, video_file in enumerate(video_files):
-        stream_url = f"{BASE_STREAM_URL}{index}.stream"
-        print(f"Streaming {video_file} under {stream_url}")
-        thread = stream_video_to_url(video_file, stream_url)
-        threads.append(thread)
-    for thread in threads:
-        thread.join()
-
-
-def stream_video_to_url(video_path: str, stream_url: str) -> Thread:
-    command = (
-        f"ffmpeg -re -stream_loop -1 -i {video_path} "
-        f"-f rtsp -rtsp_transport tcp {stream_url}"
-    )
-    return run_command_in_thread(command.split())
-
-
-def run_command_in_thread(command: list) -> Thread:
-    thread = Thread(target=run_command, args=(command,))
-    thread.start()
-    return thread
-
-
-def run_command(command: list) -> int:
-    process = subprocess.run(command)
-    return process.returncode
-
-
+# Chạy chương trình
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Script to stream videos using RTSP protocol."
-    )
-    parser.add_argument(
-        "--video_directory",
-        type=str,
-        required=True,
-        help="Directory containing video files to stream.",
-    )
-    parser.add_argument(
-        "--number_of_streams",
-        type=int,
-        default=6,
-        help="Number of video files to stream.",
-    )
-    arguments = parser.parse_args()
-    main(
-        video_directory=arguments.video_directory,
-        number_of_streams=arguments.number_of_streams,
-    )
+    run_detection()

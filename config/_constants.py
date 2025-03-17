@@ -21,7 +21,7 @@ TRAFFIC_LIGHT_MODEL_VPS = "/home/ubuntu/mekongai/test_intelligent/traffic-intell
 # --------------------STORAGE PATH------------------------#
 LICENSE_IMAGES = "./file_path/cropped_license_plates"
 
-VIDEO_DETECT = "./file_path/16h15.5.9.22.mp4"
+VIDEO_DETECT = "./file_path/20221003-102700.mp4"
 
 # --------------------POINT------------------------#
 POINT_START = sv.Point(0, 861)
@@ -30,10 +30,10 @@ POINT_END = sv.Point(1292, 861)
 # --------------------POLY ZONE------------------------#
 POLYZONE = np.array(
     [
-        [0, 750],  # Góc dưới bên trái
-        [0, 913],  # Góc trên bên trái
-        [1352, 832],  # Góc dưới bên phải
-        [1221, 660],  # Góc trên bên phải
+        [2, 712],  # Góc dưới bên trái
+        [2, 977],  # Góc trên bên trái
+        [1327, 957],  # Góc dưới bên phải
+        [1244, 724],  # Góc trên bên phải
     ]
 )
 
