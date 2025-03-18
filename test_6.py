@@ -1,21 +1,16 @@
 from copy import deepcopy
 import csv
+import time
 import os
 from typing import List
 import cv2
 import numpy as np
 
-from inference import InferencePipeline
-from inference.core.interfaces.camera.entities import VideoFrame
 from ultralytics import YOLO
-import supervision as sv
-from ultralytics.utils.plotting import Annotator
 from config import _util
 from collections import deque
 from config import _detect, _constants
 
-from utils_dt.general import find_in_list, load_zones_config
-from utils_dt.timers import ClockBasedTimer
 
 # device = "cuda:2" if torch.cuda.is_available() else "cpu"
 # print("Thiết bị đang được sử dụng:", device)
@@ -63,6 +58,19 @@ def run_detection():
     output_folder = _constants.LICENSE_IMAGES
     os.makedirs(output_folder, exist_ok=True)
 
+    # Mở file CSV để ghi log thời gian xử lý của các đoạn
+    csv_filename = "processing_times_1.csv"
+    csv_file = open(csv_filename, "w", newline="", encoding="utf-8")
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(
+        [
+            "frame",
+            "time_detection_lights",
+            "time_detections_vehicles",
+            "time_license_plates",
+        ]
+    )
+
     # 3. Vòng lặp chính để đọc khung hình từ webcam
     while True:
         ret, frame = cap.read()
@@ -72,6 +80,8 @@ def run_detection():
             print("Không nhận được khung hình (frame). Kết nối có thể đã bị ngắt.")
             return frame
         else:
+            # --- Đo thời gian xử lý detection_lights ---
+            start_detection_lights = time.time()
             detection_lights = _detect.objects_tracking(frame, detect_light)
             traffic_lights, existing_traffic_light_buffer = (
                 _detect.detect_traffic_light(
@@ -81,10 +91,10 @@ def run_detection():
             if not traffic_lights:
                 traffic_lights = {"default": "Unknown"}
             is_red_light = traffic_lights.get(1, "Unknown") == "Green"
+            time_detection_lights = time.time() - start_detection_lights
 
-            detection_results = []
-            labels = []
-
+            # --- Đo thời gian xử lý detections_vehicles ---
+            start_detections_vehicles = time.time()
             detections_vehicles = _detect.objects_tracking(
                 frame, coco_model, classes=vehicles
             )
@@ -92,6 +102,8 @@ def run_detection():
             is_detections_in_zone = polygon_zone.trigger(detections_vehicles)
             # print(polygon_zone.current_count)
 
+            detection_results = []
+            labels = []
             for vehicle in detections_vehicles:
                 xyxy, _, conf, class_id, track_id, class_name_dict = (
                     vehicle  # 0: green, 1:red, 2:yellow
@@ -103,10 +115,13 @@ def run_detection():
                 labels.append(label)
                 detection_results.append([x1, y1, x2, y2, class_id, track_id])
                 captured_vehicles[track_id] = frame_nmr
-
+            time_detections_vehicles = time.time() - start_detections_vehicles
             # # Detect license plates
+            # --- Đo thời gian xử lý license_plates ---
+            start_license_plates = time.time()
             license_plates = _detect.detect_objects(frame, detect_license_plate)
             # print("Detection: ", license_plates)
+
             for license_plate_index, license_plate in enumerate(license_plates):
                 xyxy_car, _, conf_license, class_id_license, _, _ = license_plate
                 x1_license, y1_license, x2_license, y2_license = (
@@ -169,6 +184,8 @@ def run_detection():
                             x2_license,
                             y2_license,
                         ]
+            time_license_plates = time.time() - start_license_plates
+            
             annotated_frame = _detect.draw_boxes(
                 frame,
                 detections_vehicles,
@@ -203,37 +220,9 @@ def run_detection():
                     del vehicles_info[tid]
                     violating_vehicle_ids.remove(tid)
 
-            # with open("vehicles_info.csv", "w", newline="", encoding="utf-8") as file:
-            #     writer = csv.writer(file)
-            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score"])
-
-            #     for car_id, data in vehicles_info.items():
-            #         writer.writerow(
-            #             [
-            #                 car_id,
-            #                 data["class_id"],
-            #                 data["bbox_car"],
-            #                 data["bbox_plate"],
-            #                 data["plate_text"],
-            #                 data["plate_score"],
-            #             ]
-            #         )
-            # with open("vehicles_info_log_text_1.csv", "w", newline="", encoding="utf-8") as file:
-            #     writer = csv.writer(file)
-            #     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score", "is_zone"])
-
-            #     for car_id, data in violating_vehicles.items():
-            #         writer.writerow(
-            #             [
-            #                 car_id,
-            #                 data["class_id"],
-            #                 data["bbox_car"],
-            #                 data["bbox_plate"],
-            #                 data["plate_text"],
-            #                 data["plate_score"],
-            #                 data["is_zone"],
-            #             ]
-            #         )
+            # Ghi log thời gian xử lý của từng đoạn vào file CSV
+            csv_writer.writerow([frame_nmr, time_detection_lights, time_detections_vehicles, time_license_plates])
+            csv_file.flush()  # Đảm bảo dữ liệu được ghi vào file ngay
             # 6. Hiển thị khung hình
             cv2.imshow("YOLOv8 - RTMP Stream", annotated_frame)
 
@@ -248,3 +237,35 @@ def run_detection():
 # Chạy chương trình
 if __name__ == "__main__":
     run_detection()
+
+# with open("vehicles_info.csv", "w", newline="", encoding="utf-8") as file:
+#     writer = csv.writer(file)
+#     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score"])
+
+#     for car_id, data in vehicles_info.items():
+#         writer.writerow(
+#             [
+#                 car_id,
+#                 data["class_id"],
+#                 data["bbox_car"],
+#                 data["bbox_plate"],
+#                 data["plate_text"],
+#                 data["plate_score"],
+#             ]
+#         )
+# with open("vehicles_info_log_text_1.csv", "w", newline="", encoding="utf-8") as file:
+#     writer = csv.writer(file)
+#     writer.writerow(["track_id", "class_id", "bbox_car", "bbox_plate", "plate_text", "plate_score", "is_zone"])
+
+#     for car_id, data in violating_vehicles.items():
+#         writer.writerow(
+#             [
+#                 car_id,
+#                 data["class_id"],
+#                 data["bbox_car"],
+#                 data["bbox_plate"],
+#                 data["plate_text"],
+#                 data["plate_score"],
+#                 data["is_zone"],
+#             ]
+#         )

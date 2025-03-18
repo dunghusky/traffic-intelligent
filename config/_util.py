@@ -20,6 +20,10 @@ dict_int_to_char_ = {
     "8": "B",
 }
 
+dict_int_to_char_motobike = {
+    "0": "Đ",
+}
+
 valid_characters = set("ABCDEFGHKLMNPSTUVXYZ")
 
 
@@ -158,6 +162,7 @@ def read_license_plate_car(license_plate_crop):
     """
 
     license_plate_crop_thresh = ocr.ocr(license_plate_crop)
+    print("\nlicense_plate_crop_thresh: ", license_plate_crop_thresh)
 
     # Kiểm tra nếu kết quả OCR trả về None hoặc rỗng
     if not license_plate_crop_thresh:
@@ -199,9 +204,11 @@ def read_license_plate_car(license_plate_crop):
     combined_text = (
         "-".join(detected_texts) if len(detected_texts) > 1 else detected_texts[0]
     )
+    print("\ncombined_text: ", combined_text)
 
     # Loại bỏ dấu chấm nếu cần thiết
     combined_text = combined_text.replace(".", "")
+    print("\ncombined_text: ", combined_text)
 
     # print("Combined text: ", combined_text)
 
@@ -223,7 +230,7 @@ def license_complies_format_motobike(text):
         bool: True if the license plate complies with the format, False otherwise.
     """
     # Xử lý biển số xe máy thường (9 ký tự)
-    if len(text) == 9:
+    if len(text) == 10:
         if (
             # Hai ký tự đầu là số hoặc ký tự có thể chuyển đổi thành số
             (text[0] in "0123456789" or text[0] in dict_char_to_int.keys())
@@ -232,27 +239,32 @@ def license_complies_format_motobike(text):
             and (text[2] in valid_characters or text[2] in dict_int_to_char_.keys())
             # Ký tự thứ tư là số hoặc ký tự chuyển đổi từ số
             and (text[3] in "0123456789" or text[3] in dict_char_to_int.keys())
+            # Ký tự thứ tư là dấu phân cách (dấu chấm hoặc dấu "•")
+            and text[4] in ["•", "-"]
             # Năm ký tự cuối là số hoặc ký tự có thể chuyển đổi thành số
             and all(
                 (char in "0123456789" or char in dict_char_to_int.keys())
-                for char in text[4:]
+                for char in text[5:]
             )
         ):
             return True
 
     # Xử lý biển số xe máy điện (10 ký tự)
-    elif len(text) == 10:
+    elif len(text) == 11:
         if (
             # Hai ký tự đầu là số hoặc ký tự có thể chuyển đổi thành số
             (text[0] in "0123456789" or text[0] in dict_char_to_int.keys())
             and (text[1] in "0123456789" or text[1] in dict_char_to_int.keys())
             # Kiểm tra nhóm đăng ký (2 ký tự chữ cái)
-            and (text[2] in valid_characters or text[2] in dict_int_to_char_.keys())
-            and (text[3] in valid_characters or text[3] in dict_int_to_char_.keys())
+            and (text[2] in "M")
+            and (text[3] in "Đ" or text[3] in dict_int_to_char_motobike.keys())
+            and (text[4] in "0123456789" or text[1] in dict_char_to_int.keys())
+            # Ký tự thứ tư là dấu phân cách (dấu chấm hoặc dấu "•")
+            and text[5] in ["•", "-"]
             # Sáu ký tự cuối là số hoặc ký tự có thể chuyển đổi thành số
             and all(
                 (char in "0123456789" or char in dict_char_to_int.keys())
-                for char in text[4:]
+                for char in text[6:]
             )
         ):
             return True
@@ -271,12 +283,11 @@ def format_license_motobike(text):
         str: Formatted license plate text.
     """
     license_plate_ = ""
-    mapping = {
+    mapping_len_10 = {
         0: dict_char_to_int,  # Ký tự đầu tiên
         1: dict_char_to_int,  # Ký tự thứ hai
         2: dict_int_to_char,  # Ký tự nhóm đăng ký đầu tiên
-        3: dict_int_to_char,  # Ký tự nhóm đăng ký thứ hai (nếu có)
-        4: dict_char_to_int,  # Năm hoặc sáu ký tự số
+        3: dict_char_to_int,  # Ký tự nhóm đăng ký thứ hai (nếu có)
         5: dict_char_to_int,
         6: dict_char_to_int,
         7: dict_char_to_int,
@@ -284,21 +295,42 @@ def format_license_motobike(text):
         9: dict_char_to_int,
     }
 
-    for j in range(len(text)):
-        if j in mapping and text[j] in mapping[j].keys():
-            license_plate_ += mapping[j][text[j]]
-        else:
-            license_plate_ += text[j]
+    mapping_len_11 = {
+        0: dict_char_to_int,  # Ký tự đầu tiên
+        1: dict_char_to_int,  # Ký tự thứ hai
+        2: dict_int_to_char,  # Ký tự nhóm đăng ký đầu tiên
+        3: dict_int_to_char_motobike,  # Ký tự nhóm đăng ký thứ hai (nếu có)
+        4: dict_char_to_int,
+        6: dict_char_to_int,
+        7: dict_char_to_int,
+        8: dict_char_to_int,
+        9: dict_char_to_int,
+        10: dict_char_to_int,
+    }
 
-    # Định dạng lại biển số xe máy thường hoặc xe máy điện
-    if len(license_plate_) == 9:
-        formatted_text = f"{license_plate_[:4]}-{license_plate_[4:]}"
-    elif len(license_plate_) == 10:
-        formatted_text = f"{license_plate_[:5]}-{license_plate_[5:]}"
-    else:
-        formatted_text = license_plate_
+    if len(text) == 10:
+        for j in range(len(text)):
+            if j in mapping_len_10 and text[j] in mapping_len_10[j].keys():
+                license_plate_ += mapping_len_10[j][text[j]]
+            else:
+                license_plate_ += text[j]
 
-    return formatted_text
+    elif len(text) == 11:
+        for j in range(len(text)):
+            if j in mapping_len_11 and text[j] in mapping_len_11[j].keys():
+                license_plate_ += mapping_len_11[j][text[j]]
+            else:
+                license_plate_ += text[j]
+
+    # # Định dạng lại biển số xe máy thường hoặc xe máy điện
+    # if len(license_plate_) == 10:
+    #     formatted_text = f"{license_plate_[:4]}-{license_plate_[4:]}"
+    # elif len(license_plate_) == 11:
+    #     formatted_text = f"{license_plate_[:5]}-{license_plate_[5:]}"
+    # else:
+    #     formatted_text = license_plate_
+
+    return license_plate_
 
 
 def read_license_plate_motobike(license_plate_crop):
@@ -313,7 +345,7 @@ def read_license_plate_motobike(license_plate_crop):
     """
 
     license_plate_crop_thresh = ocr.ocr(license_plate_crop)
-    # print("\nlicense_plate_crop_thresh: ", license_plate_crop_thresh)
+    print("\nlicense_plate_crop_thresh: ", license_plate_crop_thresh)
 
     if not license_plate_crop_thresh:
         # print("No text detected by OCR.")
@@ -345,11 +377,11 @@ def read_license_plate_motobike(license_plate_crop):
         # print("No valid text detected.")
         return 0, 0
 
-    combined_text = (
-        "-".join(detected_texts) if len(detected_texts) > 1 else detected_texts[0]
-    )
+    first_part = detected_texts[0].replace("-", "")
+    remaining_parts = detected_texts[1:]
+    combined_text = first_part + "-" + "".join(remaining_parts) if remaining_parts else first_part
 
-    # print("Combined text: ", combined_text)
+    print("Combined text: ", combined_text)
 
     if license_complies_format_motobike(combined_text):
         average_score = total_score / len(detected_texts)
@@ -387,6 +419,3 @@ def get_car(license_plate, vehicle_track_ids):
         return vehicle_track_ids[car_indx]
 
     return -1, -1, -1, -1, -1, -1
-
-
-

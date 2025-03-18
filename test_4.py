@@ -40,31 +40,44 @@ class CustomSink:
             polygon=self.polygons,
             triggering_anchors=(sv.Position.CENTER,),
         )
+        # Thêm annotator để vẽ vùng polygon
+        self.zone_annotator = sv.PolygonZoneAnnotator(
+            zone=self.zones, color=(0, 255, 0)
+        )  # Màu xanh lá
 
     def on_prediction(self, detections: sv.Detections, frame: VideoFrame) -> None:
         self.fps_monitor.tick()
         fps = self.fps_monitor.fps
 
         detections = detections
+        print("\ntest: ", detections)
 
         annotated_frame = frame.image.copy()
 
-        for idx, zone in enumerate(self.zones):
-            annotated_frame = self.zones.annotate(scene=frame)
+        # detections_in_zone = self.zones.trigger(detections)
+        # time_in_zone = self.timers[0].tick(detections_in_zone)
+        # custom_color_lookup = np.full(detections_in_zone.class_id.shape, 0)
 
-            detections_in_zone = detections[zone.trigger(detections)]
-            time_in_zone = self.timers[idx].tick(detections_in_zone)
-            custom_color_lookup = np.full(detections_in_zone.class_id.shape, idx)
+        # detection_results = []
+        # labels = []
+        # xyxy, _, conf, class_id, track_id, class_name_dict = (
+        #     vehicle  # 0: green, 1:red, 2:yellow
+        # )
+        # x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
+        # class_name = class_name_dict.get("class_name", None)
 
-            labels = [
-                f"#{tracker_id} {int(time // 60):02d}:{int(time % 60):02d}"
-                for tracker_id, time in zip(detections_in_zone.tracker_id, time_in_zone)
-            ]
-            annotated_frame = box_annotator.annotate(detections=detections, scene=frame)
+        # label = f"#{track_id} {class_name} {conf:.2f}"
+        # labels.append(label)
+        # detection_results.append([x1, y1, x2, y2, class_id, track_id])
 
-            annotated_frame = label_annotator.annotate(
-                labels=labels, scene=frame, detections=detections
-            )
+        # annotated_frame = box_annotator.annotate(
+        #     detections=detections, scene=annotated_frame
+        # )
+
+        # annotated_frame = label_annotator.annotate(
+        #     labels=labels, scene=annotated_frame, detections=detections
+        # )
+        # annotated_frame = self.zone_annotator.annotate(scene=annotated_frame)
 
         cv2.imshow("Processed Video", annotated_frame)
         cv2.waitKey(1)
@@ -78,10 +91,12 @@ def main(
     def inference_callback(frame: VideoFrame) -> sv.Detections:
         if isinstance(frame, list):  # Kiểm tra xem frame có phải là danh sách không
             frame = frame[0]  # Lấy phần tử đầu tiên của danh sách
-        results = results = coco_model.track(
+        results = coco_model.track(
             frame.image, persist=True, conf=0.1, classes=vehicles
         )[0]
-        return sv.Detections.from_ultralytics(results).with_nms(threshold=0.5)
+        detections = sv.Detections.from_ultralytics(results)
+        # print("\ntest_1: ", detections)
+        return detections
 
     sink = CustomSink()
 
